@@ -14,8 +14,8 @@
 // Nothing on-chain reveals birthYear. Ever.
 // ============================================================================
 
-use std::hash::poseidon::bn254::hash_2 as poseidon2;
-use std::hash::poseidon::bn254::hash_3 as poseidon3;
+use dep::poseidon::poseidon::bn254::hash_2 as poseidon2;
+use dep::poseidon::poseidon::bn254::hash_3 as poseidon3;
 
 fn main(
     // Public inputs
