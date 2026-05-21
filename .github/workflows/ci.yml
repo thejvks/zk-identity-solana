@@ -1,0 +1,37 @@
+name: Noir Circuit Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-circuits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install noirup
+        run: |
+          curl -L https://raw.githubusercontent.com/noir-lang/noirup/refs/heads/main/install | bash
+          echo "$HOME/.nargo/bin" >> $GITHUB_PATH
+
+      - name: Install nargo
+        run: |
+          export PATH="$HOME/.nargo/bin:$PATH"
+          noirup -v 1.0.0-beta.13
+
+      - name: Nargo version
+        run: nargo --version
+
+      - name: Test age_verifier circuit
+        run: |
+          cd circuits/age_verifier
+          nargo test
+
+      - name: Test unique_human circuit
+        run: |
+          cd circuits/unique_human
+          nargo test
