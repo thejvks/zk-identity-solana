@@ -1,0 +1,6 @@
+nullifier_hash = ""
+commitment_hash = ""
+min_age = "18"
+current_year = "2025"
+birth_year = "1995"
+salt = "12345"

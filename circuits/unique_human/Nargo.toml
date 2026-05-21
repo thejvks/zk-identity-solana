@@ -1,0 +1,6 @@
+[package]
+name = "unique_human"
+type = "bin"
+authors = ["thejvks"]
+
+[dependencies]

@@ -1,0 +1,6 @@
+[package]
+name = "age_verifier"
+type = "bin"
+authors = ["thejvks"]
+
+[dependencies]

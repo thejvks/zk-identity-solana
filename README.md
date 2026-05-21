@@ -2,32 +2,58 @@
 
 > **Prove who you are. Reveal nothing.**
 
-Zero-Knowledge identity verification on Solana — built with Anchor framework, Groth16 proofs, and an on-chain reputation oracle.
+Zero-Knowledge identity verification on Solana using **Noir circuits**, **Groth16 proofs via Sunspot**, and on-chain verification — following the [Solana Foundation's recommended pattern](https://github.com/solana-foundation/noir-examples).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.75+-orange)](programs/)
-[![Anchor](https://img.shields.io/badge/Anchor-0.30.1-blue)](programs/)
+[![Noir](https://img.shields.io/badge/Noir-1.0.0--beta.13-purple)](circuits/)
+[![Solana](https://img.shields.io/badge/Solana-2.1-green)](https://solana.com)
 
 ---
 
-## Features
+## Circuits
 
-| Feature | Description |
-|---|---|
-| **Age Proof** | Prove `age >= N` without revealing your birthdate |
-| **Unique Human** | Sybil-resistance — one proof per real person per context |
-| **Reputation Oracle** | On-chain reputation scores anchored to ZK nullifiers |
-| **Revocable** | Self-revoke any attestation at any time |
-| **PDA-based Storage** | All state stored in Program Derived Addresses |
+| Circuit | Description | Private Inputs | Public Inputs |
+|---|---|---|---|
+| **age_verifier** | Prove `age >= N` without revealing birthdate | birthYear, salt | minAge, currentYear, nullifierHash, commitmentHash |
+| **unique_human** | Sybil-resistance — one proof per person per app | secret, salt | contextId, nullifierHash, commitmentHash |
+
+---
+
+## Pipeline
+
+```
+Noir Circuit → nargo compile → nargo execute → Sunspot prove → Solana verify
+```
+
+| Stage | Tool | What happens |
+|---|---|---|
+| Write circuit | Noir | Define constraints in `src/main.nr` |
+| Unit test | `nargo test` | Run local circuit tests |
+| Compile | `nargo compile` | Convert to ACIR bytecode |
+| Generate witness | `nargo execute` | Produce witness from Prover.toml inputs |
+| Setup keys | `sunspot setup` | Generate proving key + verifying key |
+| Generate proof | `sunspot prove` | Create Groth16 proof |
+| Build verifier | `sunspot deploy` | Create Solana verifier program (.so) |
+| Deploy | `solana program deploy` | Deploy verifier to devnet/mainnet |
+| Verify on-chain | Submit tx | Send `proof_bytes + public_witness_bytes` |
 
 ---
 
 ## Prerequisites
 
-- [Rust](https://rustup.rs/) (1.75+)
-- [Solana CLI](https://docs.solanalabs.com/cli/install) (1.18+)
-- [Anchor CLI](https://www.anchor-lang.com/docs/installation) (0.30+)
-- [Node.js](https://nodejs.org/) (20+)
+- [Nargo](https://noir-lang.org/docs/) 1.0.0-beta.13
+- [Sunspot](https://github.com/reilabs/sunspot) (requires Go 1.24+)
+- [Solana CLI](https://docs.solanalabs.com/cli/install) 2.1+
+- [Node.js](https://nodejs.org/) 18+
+- [just](https://github.com/casey/just) (optional, for command runner)
+
+```bash
+# Install Nargo
+noirup -v 1.0.0-beta.13
+
+# Install Sunspot (requires Go)
+git clone https://github.com/reilabs/sunspot && cd sunspot && go build
+```
 
 ---
 
@@ -39,65 +65,81 @@ cd zk-identity-solana
 npm install
 ```
 
-### Build
+### Run Circuit Tests (no Solana needed)
 
 ```bash
-anchor build
+just test-all
+# or
+npm test
 ```
 
-### Test (local validator)
+### Full On-Chain Pipeline
 
 ```bash
-anchor test
-```
+# 1. Setup wallets and fund on devnet
+just setup-wallets
+just fund-wallets
 
-### Deploy to Devnet
-
-```bash
-solana config set --url devnet
-solana airdrop 2
-anchor deploy
+# 2. Compile, setup keys, prove, deploy, verify
+just full-age
+just full-unique
 ```
 
 ---
 
-## Programs
+## Project Structure
 
-### zk_identity
-
-| Instruction | Description |
-|---|---|
-| `initialize` | Set up the global registry |
-| `register_verifier` | Register a verifier key for a claim type |
-| `verify_and_attest` | Submit a ZK proof and create an attestation |
-| `has_claim` | Check if a user has a verified claim |
-| `revoke_attestation` | Self-revoke an attestation |
-
-### reputation_oracle
-
-| Instruction | Description |
-|---|---|
-| `initialize` | Set up the oracle config |
-| `set_oracle_status` | Authorize/revoke oracle signers |
-| `submit_score` | Submit a reputation score (0-100) |
+```
+├── circuits/
+│   ├── age_verifier/
+│   │   ├── src/main.nr          # Age proof circuit (Noir)
+│   │   ├── Nargo.toml           # Circuit config
+│   │   ├── Prover.toml          # Input values
+│   │   └── client/verify.ts     # On-chain verification client
+│   └── unique_human/
+│       ├── src/main.nr          # Uniqueness proof circuit (Noir)
+│       ├── Nargo.toml
+│       ├── Prover.toml
+│       └── client/verify.ts
+├── lib/
+│   ├── proof.ts                 # Proof generation pipeline
+│   └── verify.ts                # On-chain verification helpers
+├── justfile                     # Command runner
+└── package.json
+```
 
 ---
 
-## Architecture
+## How It Works
+
+### Age Verification
 
 ```
-User Device                              Solana
-+---------------+                      +---------------------+
-| Circom proof  | ---- proof ------>   | zk_identity program |
-| (client-side) |                      |   PDA: attestation  |
-+---------------+                      |   PDA: user_profile |
-                                       +---------------------+
-                                       | reputation_oracle   |
-                                       |   PDA: score_account|
-                                       +---------------------+
+Private: birthYear=1995, salt=random
+Public:  minAge=18, currentYear=2025
+
+Circuit proves:
+  1. commitmentHash == Poseidon(birthYear, salt)     → you know the birthYear
+  2. nullifierHash  == Poseidon(birthYear, salt, 1)   → prevents replay
+  3. currentYear - birthYear >= minAge                → you are old enough
+
+Nothing on-chain reveals birthYear. Ever.
 ```
 
-The same Circom circuits (AgeVerifier, UniqueHuman) generate proofs client-side. The Solana programs verify and store attestations using PDAs — replay protection comes from the nullifier-seeded PDA (can't init twice).
+### Unique Human
+
+```
+Private: secret, salt
+Public:  contextId (app identifier)
+
+Circuit proves:
+  1. commitmentHash == Poseidon(secret, salt)
+  2. nullifierHash  == Poseidon(secret, salt, contextId)
+  3. secret != 0
+
+Same human + different app = different nullifier.
+Cross-app tracking is cryptographically impossible.
+```
 
 ---
 

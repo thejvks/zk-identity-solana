@@ -1,4 +1,10 @@
-target/
 node_modules/
-.anchor/
-test-ledger/
+dist/
+circuits/*/target/
+circuits/*/keypair/
+*.pk
+*.vk
+*.ccs
+*.proof
+*.pw
+*.so

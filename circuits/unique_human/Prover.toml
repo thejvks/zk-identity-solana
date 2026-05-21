@@ -1,0 +1,5 @@
+nullifier_hash = ""
+commitment_hash = ""
+context_id = "1"
+secret = "987654321"
+salt = "111222333"
